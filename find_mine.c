@@ -3,9 +3,9 @@
 #include <time.h>
 #include <string.h>
 #include <curses.h>
-#define MineFlag 0x0001
-#define CleanFlag 0x0002
-#define MarkFlag 0x0003
+#define MineFlag  0x00000001  // ... 0000 0001  unsigned int flag
+#define CleanFlag 0x00000002  // ... 0000 0010
+#define MarkFlag  0x00000004  // ... 0000 0100
 
 
 void random(void){
@@ -46,9 +46,8 @@ void printMap(int * MM, int ix, int iy){
 }
 #endif
 
-void CreateMineMap(int * MineMap, int MapSize, int * MineList, int MineN){
+void CreateMineMap(unsigned int * MineMap, int MapSize, int * MineList, int MineN){
   int i,j;
-  //int sum=0;
 
 // Create random seed
   random();
@@ -70,17 +69,9 @@ void CreateMineMap(int * MineMap, int MapSize, int * MineList, int MineN){
   }
 
 // Initial MineMap with 0, Mine set as MineFlag
-  for (i=0; i<MapSize; i++){
-    MineMap[i]=0;
-  }
-  for (i=0; i<MineN; i++){
-    MineMap[MineList[i]]=MineMap[MineList[i]]|MineFlag;
-//    printf("x: %d, y: %d, %d\n", MineList[i]%20, MineList[i]/20, MineMap[MineList[i]]);
- //   sum++;
+  for (i=0; i<MapSize; i++) MineMap[i]=0;
+  for (i=0; i<MineN; i++) MineMap[MineList[i]]=MineMap[MineList[i]]|MineFlag;
 
-  }
-//  printf("sum: %d\n",sum);
- // getch();
 }
 
 void init_window(){
@@ -88,42 +79,135 @@ void init_window(){
   cbreak;    //    │ 啟動 curses 模式
   noecho();  //    │
   nonl();    //  ←┘
+  intrflush(stdscr,FALSE);
+  keypad(stdscr,TRUE);
   refresh();
 }
 
-void Create_MineWin(WINDOW * MineWin, int iy, int ix, int * MineMap){
+void Create_MineWin(WINDOW ** MineWin, int iy, int ix, unsigned int * MineMap, int inity, int initx){
   int i,j,mx,my;
 
-  MineWin=newwin(iy+2, 2*(ix+1)+1, 0, 0);
-  box(MineWin, '|', '-');
-  touchwin(MineWin);
-  wrefresh(MineWin);
-#if 1
+  *MineWin=newwin(iy+2, 2*(ix+1)+1, inity, initx);
+  box(*MineWin, '|', '-');
+  touchwin(*MineWin);
+  wrefresh(*MineWin);
   for(j=0; j<iy; j++){
-    //sleep(1);
-//    printf(" | ");
     for(i=0; i<ix; i++){
       my=j+1;
       mx=2*(i+1);
-      wmove(MineWin, my, mx);
-      if(*(MineMap+j*iy+i)&MineFlag ){
-        waddch(MineWin, 'B');
-      }else{
-        waddch(MineWin, '#');
-      //  printf("  ");
-      }
+      wmove(*MineWin, my, mx);
+      waddch(*MineWin, '#');
     }
- //   printf("  | ");
-  //  printf("\n");
   }
 #endif
+  wrefresh(*MineWin);
+}
+
+void Check_MineWin(WINDOW * MineWin, int iy, int ix, unsigned int * MineMap, int cy, int cx){
+  int i,j,cm=0;
+
+  touchwin(MineWin);
   wrefresh(MineWin);
+  if(*(MineMap+cy*iy+cx)&MineFlag ){
+    wmove(MineWin, (cy+1), 2*(cx+1));
+    waddch(MineWin, 'B');
+  }else{
+    wmove(MineWin, (cy+1), 2*(cx+1));
+    *(MineMap+cy*iy+cx)|=CleanFlag;
+    for(i=(cx>0?cx-1:0);i<=(cx<ix-1?cx+1:ix-1);i++){
+    for(j=(cy>0?cy-1:0);j<=(cy<iy-1?cy+1:iy-1);j++){
+      if(*(MineMap+j*iy+i)&MineFlag ) cm++;
+    }}
+    if(cm >0 ){
+      wmove(MineWin, (cy+1), 2*(cx+1));
+      waddch(MineWin, cm+48);  // In ACSII table, number 0 is '48'.
+    }else{
+      waddch(MineWin, ' ');
+      for(i=(cx>0?cx-1:0);i<=(cx<ix-1?cx+1:ix-1);i++){
+      for(j=(cy>0?cy-1:0);j<=(cy<iy-1?cy+1:iy-1);j++){
+        if(!(*(MineMap+j*iy+i)&CleanFlag)) Check_MineWin(MineWin, iy, ix, MineMap, j, i);
+      }}
+    }
+  }
+}
+
+
+void Mark_MineWin(WINDOW * MineWin, int iy, int ix, unsigned int * MineMap, int my, int mx){
+
+  touchwin(MineWin);
+  wrefresh(MineWin);
+
+  if(!(*(MineMap+my*iy+mx)&MarkFlag) & !(*(MineMap+my*iy+mx)&CleanFlag)){
+    *(MineMap+my*iy+mx)|=MarkFlag;
+    wmove(MineWin, (my+1), 2*(mx+1));
+    waddch(MineWin, '?');
+  }else if(!(*(MineMap+my*iy+mx)&CleanFlag)){
+    *(MineMap+my*iy+mx)&= (~MarkFlag);
+    wmove(MineWin, (my+1), 2*(mx+1));
+    waddch(MineWin, '#');
+  }
+
+}
+
+void Move_MineWin(WINDOW * MineWin, int iy, int ix, unsigned int * MineMap){
+  int mx=ix/2,my=iy/2,ch,tx=ix/2,ty=iy/2;
+  int action=1;
+
+  touchwin(MineWin);
+  wrefresh(MineWin);
+  while(action){
+
+    wmove(MineWin, (ty+1), 2*(tx+1)-1);
+    waddch(MineWin, ' ');
+    wmove(MineWin, (ty+1), 2*(tx+1)+1);
+    waddch(MineWin, ' ');
+    wmove(MineWin, (my+1), 2*(mx+1)-1);
+    waddch(MineWin, '<');
+    wmove(MineWin, (my+1), 2*(mx+1)+1);
+    waddch(MineWin, '>');
+    ty=my;
+    tx=mx;
+    wmove(MineWin, (my+1), 2*(mx+1));
+    wrefresh(MineWin);
+
+    ch=getch();
+    switch (ch){
+      case KEY_UP:
+        if( my > 0 )my--;
+        break;
+      case KEY_DOWN:
+        if( my < iy-1 )my++;
+        break;
+      case KEY_LEFT:
+        if( mx > 0 )mx--;
+        break;
+      case KEY_RIGHT:
+        if( mx < ix-1 )mx++;
+        break;
+      case 32:  // space
+        Check_MineWin(MineWin, iy, ix, MineMap, my, mx);
+/*        if(*(MineMap+my*iy+mx)&MineFlag ){
+          waddch(MineWin, 'B');
+        }else{
+          waddch(MineWin, ' ');
+        }*/
+        break;
+      case 'f': // Mark flag
+        Mark_MineWin(MineWin, iy, ix, MineMap, my, mx);
+        break;
+      case 'q':
+        action=0;
+        break;
+      default:
+        break;
+    }
+  }
 }
 
 int main(void){
-  int ix=20,iy=20;
+  int ix=10,iy=10;
   int imine=10;
-  int MineMap [ix*iy];
+  unsigned int MineMap [ix*iy];
   int MineList [imine];
   WINDOW *MineWin;
 
@@ -132,16 +216,10 @@ int main(void){
 
 // Print MineMap
   init_window();
-  Create_MineWin(MineWin, iy, ix, MineMap);
-#if 0
-  MineWin=newwin(iy+2, 2*(ix+2)+1, 0, 0);
-  box(MineWin, '|', '-');
-  touchwin(MineWin);
-  wrefresh(MineWin);
-  getch();
-#endif
+  Create_MineWin(&MineWin, iy, ix, MineMap, 1, 1);
 
-  getch();
+  Move_MineWin(MineWin, iy, ix, MineMap); 
+
   endwin();
 
 //  printMap(MineMap, ix, iy);
