@@ -226,19 +226,13 @@ int Action_MenuWin(int *level, WINDOW ** MenuWin){
         mvwaddstr(*MenuWin,my,1,"  * ");
         my=(my>2?my-1:4);
         mvwaddstr(*MenuWin,my,1," <*>");
-//        my--;
-
         wmove(*MenuWin, my, mx);
-    //    if( my > 0 )my--;
         break;
       case KEY_DOWN:
         mvwaddstr(*MenuWin,my,1,"  * ");
         my=((my<4)?my+1:2);
         mvwaddstr(*MenuWin,my,1," <*>");
-        //my++;
-
         wmove(*MenuWin, my, mx);
-     //   if( my < iy-1 )my++;
         break;
       case 32:     // space
       case '\r':   // enter
@@ -253,14 +247,6 @@ int Action_MenuWin(int *level, WINDOW ** MenuWin){
     touchwin(*MenuWin);
     wrefresh(*MenuWin);
   }
-/*  for(j=0; j<iy; j++){
-    for(i=0; i<ix; i++){
-      my=j+1;
-      mx=2*(i+1);
-      wmove(*MineWin, my, mx);
-      waddch(*MineWin, '#');
-    }
-  }*/
   touchwin(stdscr);
   return 1;
 }
@@ -268,16 +254,10 @@ int Action_MenuWin(int *level, WINDOW ** MenuWin){
 int main(void){
   int ix=16,iy=15;
   int imine=10;
-  int level[3][3] ={{10, 10, 10},{15, 15, 4},{30, 15, 10}};
+  int level[3][3] ={{10, 10, 10},{15, 15, 40},{30, 15, 100}};
   unsigned int * MineMap;
   int * MineList, ilevel;
   WINDOW *MineWin, *MenuWin;
-
-
-//     win[0]=newwin(LINES/2-1,COLS-1,0,0);       /* 設定兩個視窗的大小*/
-//     win[1]=newwin(LINES/2-1,COLS-1,LINES/2,0);
-
- // memset(MineMap, 0, ix*iy*sizeof(int));
 
 // Print MineMap
   init_window();
@@ -286,23 +266,17 @@ int main(void){
   ix=level[ilevel][0];
   iy=level[ilevel][1];
   imine=level[ilevel][2];
- // printf("ilevel: %d, ix: %d, iy: %d, imine: %d\n",ilevel, level[ilevel][0], level[ilevel][1], level[ilevel][2]);
+  touchwin(stdscr);
   mvprintw(0,1," ilevel: %d, ix: %d, iy: %d, imine: %d\n",ilevel, ix, iy, imine);
 
   MineMap=(unsigned int*)malloc(ix*iy*sizeof(unsigned int));
   MineList=(int*)malloc(imine*sizeof(int));
 
   refresh();
-#if 0
-  CreateMineMap(MineMap, level[ilevel][1]*level[ilevel][0], MineList, level[ilevel][2]);
-  Create_MineWin(&MineWin, level[ilevel][1], level[ilevel][0], MineMap, 1, 1);
-  Move_MineWin(MineWin, level[ilevel][1], level[ilevel][0], MineMap); 
-#else
 
   CreateMineMap(MineMap, ix*iy, MineList, imine);
   Create_MineWin(&MineWin, iy, ix, MineMap, 2, 2);
   Move_MineWin(MineWin, iy, ix, MineMap); 
-#endif
 
   endwin();
 
