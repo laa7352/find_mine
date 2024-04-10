@@ -4,9 +4,10 @@
 #include <time.h>
 #include <string.h>
 #include <curses.h>
-#define MineFlag  0x00000001  // ... 0000 0001  unsigned int flag
-#define CleanFlag 0x00000002  // ... 0000 0010
-#define MarkFlag  0x00000004  // ... 0000 0100
+#define MineFlag     0x00000001  // ... 0000 0001  unsigned int flag
+#define CleanFlag    0x00000002  // ... 0000 0010
+#define MarkFlag     0x00000004  // ... 0000 0100
+#define QuestionFlag 0x00000008  // ... 0000 1000
 
 
 void init_random(void){
@@ -77,8 +78,8 @@ void CreateMineMap(unsigned int * MineMap, int MapSize, int * MineList, int Mine
 
 void init_window(){
   initscr(); //  ←┐
-  cbreak;    //    │ 啟動 curses 模式
-  noecho();  //    │
+  cbreak;    //   │ 啟動 curses 模式
+  noecho();  //   │
   nonl();    //  ←┘
   intrflush(stdscr,FALSE);
   keypad(stdscr,TRUE);
@@ -103,14 +104,15 @@ void Create_MineWin(WINDOW ** MineWin, int iy, int ix, unsigned int * MineMap, i
 //  wrefresh(*MineWin);
 }
 
-void Check_MineWin(WINDOW * MineWin, int iy, int ix, unsigned int * MineMap, int cy, int cx){
+void Check_MineWin(WINDOW * MineWin, int iy, int ix, unsigned int * MineMap, int cy, int cx, int CheckMarkOrQuestionFlag){
   int i,j,cm=0;
 
   touchwin(MineWin);
 //  wrefresh(MineWin);
   wmove(MineWin, (cy+1), 2*(cx+1));
-  if(!(*(MineMap+cy*ix+cx)&MarkFlag) ){
-    if(*(MineMap+cy*ix+cx)&MineFlag ){
+  if((!(*(MineMap+cy*ix+cx)&MarkFlag) && !(*(MineMap+cy*ix+cx)&QuestionFlag))
+      || !CheckMarkOrQuestionFlag){
+    if(*(MineMap+cy*ix+cx)&MineFlag){
       *(MineMap+cy*ix+cx)|=CleanFlag;
  //     wmove(MineWin, (cy+1), 2*(cx+1));
       waddch(MineWin, 'B');
@@ -128,7 +130,7 @@ void Check_MineWin(WINDOW * MineWin, int iy, int ix, unsigned int * MineMap, int
         waddch(MineWin, ' ');
         for(i=(cx>0?cx-1:0);i<=(cx<ix-1?cx+1:ix-1);i++){
         for(j=(cy>0?cy-1:0);j<=(cy<iy-1?cy+1:iy-1);j++){
-          if(!(*(MineMap+j*ix+i)&CleanFlag)) Check_MineWin(MineWin, iy, ix, MineMap, j, i);
+          if(!(*(MineMap+j*ix+i)&CleanFlag)) Check_MineWin(MineWin, iy, ix, MineMap, j, i, 0);
         }}
       }
     }
@@ -141,16 +143,23 @@ void Mark_MineWin(WINDOW * MineWin, int iy, int ix, unsigned int * MineMap, int 
   touchwin(MineWin);
   wrefresh(MineWin);
 
-  if(!(*(MineMap+my*ix+mx)&MarkFlag) & !(*(MineMap+my*ix+mx)&CleanFlag) ){
-    *(MineMap+mx*iy+mx)|=MarkFlag;
-    wmove(MineWin, (my+1), 2*(mx+1));
-    waddch(MineWin, '?');
-  }else if(!(*(MineMap+my*ix+mx)&CleanFlag)){
-    *(MineMap+my*ix+mx)&= (~MarkFlag);
-    wmove(MineWin, (my+1), 2*(mx+1));
-    waddch(MineWin, '#');
+  if(!(*(MineMap+my*ix+mx) & CleanFlag)) {
+    if(!(*(MineMap+my*ix+mx) & MarkFlag) && !(*(MineMap+my*ix+mx) & QuestionFlag)) {
+      *(MineMap+my*ix+mx) |= MarkFlag;
+      wmove(MineWin, (my+1), 2*(mx+1));
+      waddch(MineWin, 'M');
+    } else if ((*(MineMap+my*ix+mx) & MarkFlag) && !(*(MineMap+my*ix+mx) & QuestionFlag)) {
+      *(MineMap+my*ix+mx) &= (~MarkFlag);
+      *(MineMap+my*ix+mx) |= QuestionFlag;
+      wmove(MineWin, (my+1), 2*(mx+1));
+      waddch(MineWin, '?');
+    } else {
+      *(MineMap+my*ix+mx) &= (~MarkFlag);
+      *(MineMap+my*ix+mx) &= (~QuestionFlag);
+      wmove(MineWin, (my+1), 2*(mx+1));
+      waddch(MineWin, '#');
+    }
   }
-
 }
 
 void Move_MineWin(WINDOW * MineWin, int iy, int ix, unsigned int * MineMap){
@@ -189,7 +198,7 @@ void Move_MineWin(WINDOW * MineWin, int iy, int ix, unsigned int * MineMap){
         if( mx < ix-1 )mx++;
         break;
       case 32:  // space
-        Check_MineWin(MineWin, iy, ix, MineMap, my, mx);
+        Check_MineWin(MineWin, iy, ix, MineMap, my, mx, 1);
         wrefresh(MineWin);
         break;
       case 'f': // Mark flag
@@ -201,6 +210,8 @@ void Move_MineWin(WINDOW * MineWin, int iy, int ix, unsigned int * MineMap){
       default:
         break;
     }
+    // For debug flag
+    //mvprintw(1,1," mx: %d, my: %d, flag: %d\n", mx, my, *(MineMap+my*ix+mx));
   }
 }
 
