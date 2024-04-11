@@ -8,25 +8,29 @@
 #define CleanFlag    0x00000002  // ... 0000 0010
 #define MarkFlag     0x00000004  // ... 0000 0100
 #define QuestionFlag 0x00000008  // ... 0000 1000
+#define Quit_Or_Nothing 0
+#define Mine_Opened     1
+#define All_Clean       2
 
+#define DEBUG 0
 
 void init_random(void){
   srand(time(NULL));
 }
 
-#if 0
-void printMap(int * MM, int ix, int iy){
+#if DEBUG
+void printMap(unsigned int * MM, int ix, int iy){
   int i,j;
- 
-  printf(" \\ ");
+
+  printf(" ┌");
   for(i=0; i<ix; i++){
-    printf(" -");
+    printf("--");
   }
-  printf("  / ");
+  printf("-┐ ");
   printf("\n");
 
   for(j=0; j<iy; j++){
-    printf(" | ");
+    printf(" |");
     for(i=0; i<ix; i++){
       if(MM[j*ix+i]&MineFlag ){
         printf(" B");
@@ -34,15 +38,15 @@ void printMap(int * MM, int ix, int iy){
         printf("  ");
       }
     }
-    printf("  | ");
+    printf(" |");
     printf("\n");
   }
 
-  printf(" / ");
+  printf(" └");
   for(i=0; i<ix; i++){
-    printf(" -");
+    printf("--");
   }
-  printf("  \\ ");
+  printf("-┘");
   printf("\n");
 
 }
@@ -98,14 +102,21 @@ void Create_MineWin(WINDOW ** MineWin, int iy, int ix, unsigned int * MineMap, i
       my=j+1;
       mx=2*(i+1);
       wmove(*MineWin, my, mx);
-      waddch(*MineWin, '#');
+#if DEBUG
+      if(*(MineMap+j*ix+i)&MineFlag)
+        waddch(*MineWin, 'B');
+      else
+#endif
+        waddch(*MineWin, '#');
     }
   }
 //  wrefresh(*MineWin);
 }
 
-void Check_MineWin(WINDOW * MineWin, int iy, int ix, unsigned int * MineMap, int cy, int cx, int CheckMarkOrQuestionFlag){
+int Check_MineWin(WINDOW * MineWin, int iy, int ix, unsigned int * MineMap, int cy, int cx, int CheckMarkOrQuestionFlag){
   int i,j,cm=0;
+  int count_mine_and_clean = 0;
+  int count_clean = 0;
 
   touchwin(MineWin);
 //  wrefresh(MineWin);
@@ -116,6 +127,7 @@ void Check_MineWin(WINDOW * MineWin, int iy, int ix, unsigned int * MineMap, int
       *(MineMap+cy*ix+cx)|=CleanFlag;
  //     wmove(MineWin, (cy+1), 2*(cx+1));
       waddch(MineWin, 'B');
+      return Mine_Opened;
     }else{
   //    wmove(MineWin, (cy+1), 2*(cx+1));
       *(MineMap+cy*ix+cx)|=CleanFlag;
@@ -135,6 +147,29 @@ void Check_MineWin(WINDOW * MineWin, int iy, int ix, unsigned int * MineMap, int
       }
     }
   }
+  if (CheckMarkOrQuestionFlag) {
+    /*
+       check all map is clear or not
+       1. count MineFlag and !CleanFlag
+       2. count all !CleanFlag
+       3. if 1 == 2, the game is passed
+     */
+    for(j=0; j<iy; j++){
+    for(i=0; i<ix; i++){
+      if(!(*(MineMap+j*ix+i)&CleanFlag)) {
+        count_clean++;
+        if(*(MineMap+j*ix+i)&MineFlag){
+          count_mine_and_clean++;
+        }
+      }
+    }}
+    if (count_clean == count_mine_and_clean) {
+      return All_Clean;
+    }
+    //mvprintw(1,1," count_clean: %d, count_mine_and_clean: %d", count_clean, count_mine_and_clean);
+  }
+
+  return Quit_Or_Nothing;
 }
 
 
@@ -162,9 +197,11 @@ void Mark_MineWin(WINDOW * MineWin, int iy, int ix, unsigned int * MineMap, int 
   }
 }
 
-void Move_MineWin(WINDOW * MineWin, int iy, int ix, unsigned int * MineMap){
+int Move_MineWin(WINDOW * MineWin, int iy, int ix, unsigned int * MineMap){
   int mx=ix/2,my=iy/2,ch,tx=ix/2,ty=iy/2;
   int action=1;
+  int rc = 0;
+  int result = 0;
 
   touchwin(MineWin);
   wrefresh(MineWin);
@@ -198,7 +235,11 @@ void Move_MineWin(WINDOW * MineWin, int iy, int ix, unsigned int * MineMap){
         if( mx < ix-1 )mx++;
         break;
       case 32:  // space
-        Check_MineWin(MineWin, iy, ix, MineMap, my, mx, 1);
+        rc = Check_MineWin(MineWin, iy, ix, MineMap, my, mx, 1);
+        if (rc > 0) {
+          result = rc;
+          action = 0;
+        }
         wrefresh(MineWin);
         break;
       case 'f': // Mark flag
@@ -206,6 +247,7 @@ void Move_MineWin(WINDOW * MineWin, int iy, int ix, unsigned int * MineMap){
         break;
       case 'q':
         action=0;
+        result = Quit_Or_Nothing;
         break;
       default:
         break;
@@ -213,6 +255,7 @@ void Move_MineWin(WINDOW * MineWin, int iy, int ix, unsigned int * MineMap){
     // For debug flag
     //mvprintw(1,1," mx: %d, my: %d, flag: %d\n", mx, my, *(MineMap+my*ix+mx));
   }
+  return result;
 }
 
 int Action_MenuWin(int *level, WINDOW ** MenuWin){
@@ -268,7 +311,8 @@ int main(void){
   int level[3][3] ={{10, 10, 10},{15, 15, 40},{30, 15, 100}};
   unsigned int * MineMap;
   int * MineList, ilevel;
-  WINDOW *MineWin, *MenuWin;
+  WINDOW *MineWin, *MenuWin, *MineTitleWin;
+  int rc = 0;
 
 // Print MineMap
   init_window();
@@ -278,21 +322,40 @@ int main(void){
   iy=level[ilevel][1];
   imine=level[ilevel][2];
   touchwin(stdscr);
-  mvprintw(0,1," ilevel: %d, ix: %d, iy: %d, imine: %d\n",ilevel, ix, iy, imine);
 
   MineMap=(unsigned int*)malloc(ix*iy*sizeof(unsigned int));
   MineList=(int*)malloc(imine*sizeof(int));
 
   refresh();
 
+  MineTitleWin = newwin(2, 80, 0, 2);
+  mvwprintw(MineTitleWin, 0, 0, "ilevel: %d, ix: %d, iy: %d, imine: %d",ilevel, ix, iy, imine);
+  mvwprintw(MineTitleWin, 1, 0, "'f': swith flag, 'space': open a cell, 'q': quit game, 'arrow key': move cursor");
+  wrefresh(MineTitleWin);
+
+
   CreateMineMap(MineMap, ix*iy, MineList, imine);
   Create_MineWin(&MineWin, iy, ix, MineMap, 2, 2);
-  Move_MineWin(MineWin, iy, ix, MineMap); 
+  rc = Move_MineWin(MineWin, iy, ix, MineMap);
 
+  wmove(MineTitleWin, 1, 0);
+  winsdelln(MineTitleWin, 1);
+  if (rc == Quit_Or_Nothing)
+    mvwprintw(MineTitleWin, 1, 0, "Quit. Press any key.");
+  else if (rc == Mine_Opened)
+    mvwprintw(MineTitleWin, 1, 0, "Oops, you open a mine...Press any key.");
+  else if (rc == All_Clean)
+    mvwprintw(MineTitleWin, 1, 0, "All clean, you win! Press any key.");
+
+  wrefresh(MineTitleWin);
+
+  getch();
   endwin();
 
+#if DEBUG
+  printMap(MineMap, ix, iy);
+#endif
   free(MineMap);
   free(MineList);
-//  printMap(MineMap, ix, iy);
   return 0;
 }
